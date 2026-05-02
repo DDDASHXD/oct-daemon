@@ -12,12 +12,13 @@ export interface CliOptions {
   readonly: boolean;
   exclude: string[];
   name?: string;
+  detached: boolean;
 }
 
 export function createProgram(): Command {
   const program = new Command();
   program
-    .name('opencollabtools-daemon')
+    .name('oct-daemon')
     .description('Run a persistent headless Open Collaboration Tools host')
     .requiredOption('--workspace <path>', 'workspace folder to share')
     .option('--server <url>', 'Open Collaboration Server URL', DEFAULT_SERVER_URL)
@@ -26,6 +27,8 @@ export function createProgram(): Command {
     .option('--readonly', 'reject guest write operations', false)
     .option('--exclude <glob>', 'exclude glob; can be repeated', collect, [] as string[])
     .option('--name <name>', 'workspace display name')
+    .option('-d, --detached', 'run the daemon in the background', false)
+    .option('--detatched', 'alias for --detached', false)
     .option('--code <code>', 'unsupported; OCT servers generate room IDs')
     .allowUnknownOption(false);
   return program;
@@ -50,7 +53,8 @@ export function parseOptions(argv: string[]): CliOptions {
     authTokenFile,
     readonly: Boolean(opts.readonly),
     exclude: [...DEFAULT_EXCLUDES, ...(opts.exclude as string[])],
-    name: opts.name ? String(opts.name) : undefined
+    name: opts.name ? String(opts.name) : undefined,
+    detached: Boolean(opts.detached || opts.detatched)
   };
 }
 

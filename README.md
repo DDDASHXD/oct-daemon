@@ -1,4 +1,4 @@
-# opencollabtools-daemon
+# @skxv/oct-daemon
 
 Headless host daemon for Open Collaboration Tools.
 
@@ -11,17 +11,22 @@ pnpm install
 pnpm build
 ```
 
-## Run With PM2
+## Run
 
 ```bash
-pm2 start /Users/skov/Documents/GitHub/oct-daemon/dist/cli.js --name oct-daemon -- --workspace /path/to/workspace
-pm2 logs oct-daemon
+npx @skxv/oct-daemon --workspace /path/to/workspace
 ```
 
 With a custom OCT server:
 
 ```bash
-pm2 start /Users/skov/Documents/GitHub/oct-daemon/dist/cli.js --name oct-daemon -- --workspace /path/to/workspace --server https://your-oct-server.example/
+npx @skxv/oct-daemon --workspace /path/to/workspace --server https://your-oct-server.example/
+```
+
+Run in the background:
+
+```bash
+npx @skxv/oct-daemon --workspace /path/to/workspace --detached
 ```
 
 The daemon prints:
@@ -30,6 +35,15 @@ The daemon prints:
 ROOM_ID=<generated-code>
 JOIN_URI=<server-url>#<generated-code>
 ```
+
+Detached mode prints:
+
+```text
+DETACHED_PID=<pid>
+LOG_FILE=<workspace>/.opencollabtools-daemon/oct-daemon.log
+```
+
+The room details are written to the log file.
 
 Enter the generated room code in a physical VS Code instance using the Open Collaboration Tools extension.
 
@@ -43,6 +57,8 @@ Enter the generated room code in a physical VS Code instance using the Open Coll
 --readonly                  Reject write operations from guests
 --exclude <glob>            Repeatable exclude glob
 --name <name>               Workspace display name, defaults to folder basename
+-d, --detached              Run in the background
+--detatched                 Alias for --detached
 ```
 
 Default excludes: `**/.env`, `.git/**`, `node_modules/**`.

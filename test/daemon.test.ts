@@ -23,7 +23,8 @@ describe('OpenCollabDaemon protocol handlers', () => {
       authTokenFile: path.join(workspace, '.token'),
       readonly: false,
       exclude: DEFAULT_EXCLUDES,
-      name: 'project'
+      name: 'project',
+      detached: false
     }, logger);
 
     (daemon as unknown as {

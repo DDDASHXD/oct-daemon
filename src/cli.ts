@@ -2,6 +2,7 @@
 import * as crypto from 'node:crypto';
 import { initializeProtocol } from 'open-collaboration-protocol';
 import { OpenCollabDaemon } from './daemon.js';
+import { startDetachedDaemon } from './detached.js';
 import { consoleLogger } from './logger.js';
 import { parseOptions } from './options.js';
 
@@ -10,7 +11,15 @@ initializeProtocol({
 });
 
 async function main(): Promise<void> {
-  const options = parseOptions(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const options = parseOptions(argv);
+  if (options.detached && process.env.OCT_DAEMON_DETACHED !== '1') {
+    const detached = await startDetachedDaemon(options, argv);
+    consoleLogger.info(`DETACHED_PID=${detached.pid}`);
+    consoleLogger.info(`LOG_FILE=${detached.logFile}`);
+    return;
+  }
+
   const daemon = new OpenCollabDaemon(options, consoleLogger);
   await daemon.start();
 
@@ -25,6 +34,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(error => {
-  consoleLogger.error('Failed to start opencollabtools-daemon', error);
+  consoleLogger.error('Failed to start oct-daemon', error);
   process.exit(1);
 });

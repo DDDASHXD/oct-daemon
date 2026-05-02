@@ -17,6 +17,12 @@ describe('parseOptions', () => {
     expect(opts.exclude).toEqual([...DEFAULT_EXCLUDES, 'dist/**', '*.log']);
   });
 
+  it('parses detached mode flags', () => {
+    expect(parseOptions(['--workspace', '.', '-d']).detached).toBe(true);
+    expect(parseOptions(['--workspace', '.', '--detached']).detached).toBe(true);
+    expect(parseOptions(['--workspace', '.', '--detatched']).detached).toBe(true);
+  });
+
   it('rejects caller supplied room codes', () => {
     expect(() => parseOptions(['--workspace', '.', '--code', 'abc'])).toThrow(/not supported/);
   });
