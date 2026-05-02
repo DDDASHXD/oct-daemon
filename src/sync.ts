@@ -144,6 +144,8 @@ export class OpenCollabSync {
         this.logger.error('Failed to apply remote file changes', error);
       });
     });
+    connection.sync.onDataUpdate(() => {});
+    connection.sync.onAwarenessUpdate(() => {});
   }
 
   private async downloadRemoteWorkspace(connection: ProtocolBroadcastConnection, host: Peer): Promise<void> {

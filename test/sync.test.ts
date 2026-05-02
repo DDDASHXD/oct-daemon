@@ -15,6 +15,24 @@ const logger: Logger = {
 };
 
 describe('OpenCollabSync', () => {
+  it('registers no-op Yjs sync handlers to keep protocol logs quiet', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oct-sync-'));
+    const sync = new OpenCollabSync({
+      command: 'sync',
+      workspace: root,
+      server: DEFAULT_SERVER_URL,
+      room: 'room',
+      authTokenFile: path.join(root, '.token'),
+      exclude: DEFAULT_EXCLUDES
+    }, logger);
+    const connection = new FakeHandlerConnection();
+
+    (sync as unknown as SyncInternals).registerConnectionHandlers(connection as unknown as ProtocolBroadcastConnection);
+
+    expect(connection.dataUpdateHandlers).toBe(1);
+    expect(connection.awarenessUpdateHandlers).toBe(1);
+  });
+
   it('skips excluded remote directories during recursive downloads', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oct-sync-'));
     const sync = new OpenCollabSync({
@@ -46,12 +64,51 @@ describe('OpenCollabSync', () => {
 
 interface SyncInternals {
   workspace: SyncWorkspace;
+  registerConnectionHandlers(connection: ProtocolBroadcastConnection): void;
   syncRemotePath(
     connection: ProtocolBroadcastConnection,
     host: Peer,
     protocolPath: string,
     reconcileDirectory: boolean
   ): Promise<void>;
+}
+
+class FakeHandlerConnection {
+  dataUpdateHandlers = 0;
+  awarenessUpdateHandlers = 0;
+
+  onDisconnect() {
+    return { dispose() {} };
+  }
+
+  onReconnect() {
+    return { dispose() {} };
+  }
+
+  dispose() {}
+
+  peer = {
+    onInfo: () => {},
+    onInit: () => {}
+  };
+
+  room = {
+    onLeave: () => {},
+    onClose: () => {}
+  };
+
+  fs = {
+    onChange: () => {}
+  };
+
+  sync = {
+    onDataUpdate: () => {
+      this.dataUpdateHandlers++;
+    },
+    onAwarenessUpdate: () => {
+      this.awarenessUpdateHandlers++;
+    }
+  };
 }
 
 class FakeRemoteConnection {
