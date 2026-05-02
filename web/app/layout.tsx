@@ -4,6 +4,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
+import Script from "next/script"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -34,6 +35,12 @@ export default function RootLayout({
       )}
     >
       <body>
+        <Script
+          async
+          defer
+          src="https://umami.skxv.dev/script.js"
+          data-website-id="df724323-e07c-49b5-a1f6-859d212783bb"
+        />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
