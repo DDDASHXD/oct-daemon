@@ -1,11 +1,10 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
 
-const hostCommand =
-  "pnpx @skxv/oct-daemon --workspace /path/to/workspace --server https://oct.skxv.dev"
+const hostCommand = "pnpx @skxv/oct-daemon --workspace /path/to/workspace"
 
 const syncCommand =
-  "pnpx @skxv/oct-daemon@latest sync --room your-room-key --workspace /path/to/workspace --server https://oct.skxv.dev"
+  "pnpx @skxv/oct-daemon@latest sync --room your-room-key --workspace /path/to/workspace"
 
 const defaultExcludes =
   "**/.env\n.git/**\nnode_modules/**\n.opencollabtools-daemon/**\n.opencollabtools-sync/**"

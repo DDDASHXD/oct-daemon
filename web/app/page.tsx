@@ -5,11 +5,10 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { CopyCommandButton } from "@/components/copy-command-button"
 import { ThemeSelect } from "@/components/theme-select"
 
-const hostCommand =
-  "pnpx @skxv/oct-daemon --workspace /path/to/workspace --server https://oct.skxv.dev"
+const hostCommand = "pnpx @skxv/oct-daemon --workspace /path/to/workspace"
 
 const syncCommand =
-  "pnpx @skxv/oct-daemon@latest sync --room your-room-key --workspace /path/to/workspace --server https://oct.skxv.dev"
+  "pnpx @skxv/oct-daemon@latest sync --room your-room-key --workspace /path/to/workspace"
 
 function TerminalWindow({
   command,
