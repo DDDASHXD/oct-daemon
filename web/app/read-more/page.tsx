@@ -1,10 +1,42 @@
 import Link from "next/link"
+import type { Metadata } from "next"
 import type { ReactNode } from "react"
+
+import { siteConfig } from "@/lib/seo"
 
 const hostCommand = "pnpx @skxv/oct-daemon --workspace /path/to/workspace"
 
 const syncCommand =
   "pnpx @skxv/oct-daemon@latest sync --room your-room-key --workspace /path/to/workspace"
+
+export const metadata: Metadata = {
+  title: "Host and sync OCT workspaces from the command line",
+  description:
+    "Learn how to use oct-daemon host mode, sync mode, CLI options, default excludes, and workspace mirroring with Open Collaboration Tools.",
+  alternates: {
+    canonical: "/read-more",
+  },
+  openGraph: {
+    title: "Host and sync OCT workspaces from the command line",
+    description:
+      "Use oct-daemon to host local folders as OCT rooms or mirror existing rooms into real workspace directories.",
+    url: "/read-more",
+    images: [
+      {
+        url: siteConfig.image,
+        width: siteConfig.imageWidth,
+        height: siteConfig.imageHeight,
+        alt: "oct-daemon Open Collaboration Tools workspace host and sync daemon",
+      },
+    ],
+  },
+  twitter: {
+    title: "Host and sync OCT workspaces from the command line",
+    description:
+      "Use oct-daemon to host local folders as OCT rooms or mirror existing rooms into real workspace directories.",
+    images: [siteConfig.image],
+  },
+}
 
 const defaultExcludes =
   "**/.env\n.git/**\nnode_modules/**\n.opencollabtools-daemon/**\n.opencollabtools-sync/**"

@@ -1,14 +1,24 @@
 import Link from "next/link"
+import type { Metadata } from "next"
 import { ArrowRight02Icon, OctopusIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { CopyCommandButton } from "@/components/copy-command-button"
 import { ThemeSelect } from "@/components/theme-select"
+import { absoluteUrl, siteConfig } from "@/lib/seo"
 
 const hostCommand = "pnpx @skxv/oct-daemon --workspace /path/to/workspace"
 
 const syncCommand =
   "pnpx @skxv/oct-daemon@latest sync --room your-room-key --workspace /path/to/workspace"
+
+export const metadata: Metadata = {
+  title: siteConfig.title,
+  description: siteConfig.description,
+  alternates: {
+    canonical: "/",
+  },
+}
 
 function TerminalWindow({
   command,
@@ -53,8 +63,35 @@ function ReadMoreLink({ href }: { href: string }) {
 }
 
 export default function Page() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: siteConfig.name,
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "macOS, Linux, Windows",
+    description: siteConfig.description,
+    url: absoluteUrl(),
+    image: absoluteUrl(siteConfig.image),
+    author: {
+      "@type": "Person",
+      name: siteConfig.author,
+      url: siteConfig.creatorUrl,
+    },
+    codeRepository: siteConfig.githubUrl,
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+    softwareHelp: absoluteUrl("/read-more"),
+  }
+
   return (
     <main className="min-h-svh bg-background px-5 pt-10 pb-16 text-foreground sm:px-8 sm:py-24">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="mx-auto flex w-full max-w-[760px] flex-col gap-20">
         <section className="flex flex-col gap-9">
           <div className="w-max rounded-full bg-page-heading p-2 text-background">
