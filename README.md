@@ -13,6 +13,8 @@ pnpm build
 
 ## Run
 
+Host a local folder as an OCT room:
+
 ```bash
 npx @skxv/oct-daemon --workspace /path/to/workspace
 ```
@@ -47,7 +49,25 @@ The room details are written to the log file.
 
 Enter the generated room code in a physical VS Code instance using the Open Collaboration Tools extension.
 
+## Sync a Joined Room
+
+Join an existing OCT room and keep a real local folder synchronized:
+
+```bash
+npx @skxv/oct-daemon sync --room <room-code> --workspace /path/to/local-mirror
+```
+
+With a custom OCT server:
+
+```bash
+npx @skxv/oct-daemon sync --room <room-code> --workspace /path/to/local-mirror --server https://your-oct-server.example/
+```
+
+The sync command downloads the remote workspace into the local mirror, watches it continuously, and pushes local file creates, edits, and deletes back to the room host. Incoming changes from collaborators are written back to the same local folder.
+
 ## Options
+
+Host options:
 
 ```text
 --workspace <path>          Folder to share
@@ -61,6 +81,17 @@ Enter the generated room code in a physical VS Code instance using the Open Coll
 --detatched                 Alias for --detached
 ```
 
-Default excludes: `**/.env`, `.git/**`, `node_modules/**`.
+Sync options:
+
+```text
+sync --room <code>          Room code to join
+sync --workspace <path>     Local folder to synchronize
+sync --server <url>         OCT server URL, defaults to https://api.open-collab.tools/
+sync --auth-token <token>   Reusable OCT login token
+sync --auth-token-file <path>
+sync --exclude <glob>       Repeatable exclude glob
+```
+
+Default excludes: `**/.env`, `.git/**`, `node_modules/**`, `.opencollabtools-daemon/**`, `.opencollabtools-sync/**`.
 
 The upstream OCT server generates room IDs. A caller-chosen `--code random-code` is not supported in v1.

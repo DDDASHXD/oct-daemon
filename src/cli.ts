@@ -5,6 +5,7 @@ import { OpenCollabDaemon } from './daemon.js';
 import { startDetachedDaemon } from './detached.js';
 import { consoleLogger } from './logger.js';
 import { parseOptions } from './options.js';
+import { OpenCollabSync } from './sync.js';
 
 initializeProtocol({
   cryptoModule: crypto.webcrypto
@@ -13,6 +14,21 @@ initializeProtocol({
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const options = parseOptions(argv);
+  if (options.command === 'sync') {
+    const sync = new OpenCollabSync(options, consoleLogger);
+    await sync.start();
+
+    const shutdown = async (signal: string) => {
+      consoleLogger.info(`Received ${signal}; stopping OCT sync.`);
+      await sync.stop();
+      process.exit(0);
+    };
+
+    process.once('SIGINT', () => void shutdown('SIGINT'));
+    process.once('SIGTERM', () => void shutdown('SIGTERM'));
+    return;
+  }
+
   if (options.detached && process.env.OCT_DAEMON_DETACHED !== '1') {
     const detached = await startDetachedDaemon(options, argv);
     consoleLogger.info(`DETACHED_PID=${detached.pid}`);

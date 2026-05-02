@@ -18,6 +18,7 @@ describe('OpenCollabDaemon protocol handlers', () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'oct-daemon-'));
     const connection = new FakeConnection();
     const daemon = new OpenCollabDaemon({
+      command: 'host',
       workspace,
       server: DEFAULT_SERVER_URL,
       authTokenFile: path.join(workspace, '.token'),
@@ -106,6 +107,7 @@ async function makeDaemon(): Promise<{ daemon: OpenCollabDaemon; workspace: stri
   return {
     workspace,
     daemon: new OpenCollabDaemon({
+      command: 'host',
       workspace,
       server: DEFAULT_SERVER_URL,
       authTokenFile: path.join(workspace, '.token'),
