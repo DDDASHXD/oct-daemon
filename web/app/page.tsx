@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight02Icon } from "@hugeicons/core-free-icons"
+import { ArrowRight02Icon, OctopusIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { CopyCommandButton } from "@/components/copy-command-button"
@@ -57,6 +57,14 @@ export default function Page() {
     <main className="min-h-svh bg-background px-5 pt-10 pb-16 text-foreground sm:px-8 sm:py-24">
       <div className="mx-auto flex w-full max-w-[760px] flex-col gap-20">
         <section className="flex flex-col gap-9">
+          <div className="w-max rounded-full bg-page-heading p-2 text-background">
+            <HugeiconsIcon
+              icon={OctopusIcon}
+              size={30}
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
+          </div>
           <div className="flex items-start justify-between gap-6">
             <div>
               <h1 className="text-[1.38rem] leading-tight font-medium text-page-heading">

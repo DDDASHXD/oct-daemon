@@ -1,4 +1,4 @@
-# @skxv/oct-daemon
+![oct-daemon banner](./banner.png)
 
 Headless host daemon for Open Collaboration Tools.
 
