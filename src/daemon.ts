@@ -27,6 +27,10 @@ export interface RunningDaemon {
 interface OpenDocument {
   normalized: YjsNormalizedTextDocument;
   flush?: NodeJS.Timeout;
+  recentHostWrite?: {
+    content: string;
+    expiresAt: number;
+  };
 }
 
 export class OpenCollabDaemon {
@@ -235,11 +239,14 @@ export class OpenCollabDaemon {
       return;
     }
     const content = this.decoder.decode(await this.workspace.readFile(protocolPath));
-    const normalized = new YjsNormalizedTextDocument(this.ydoc.getText(protocolPath), async changes => {
+    const yjsText = this.ydoc.getText(protocolPath);
+    const normalized = new YjsNormalizedTextDocument(yjsText, async changes => {
       await this.applyRemoteTextChanges(protocolPath, changes);
     });
     this.openDocuments.set(protocolPath, { normalized });
-    normalized.update({ changes: content });
+    if (yjsText.length === 0) {
+      normalized.update({ changes: content });
+    }
     this.logger.info(`DOCUMENT_OPENED=${protocolPath}`);
   }
 
@@ -257,6 +264,11 @@ export class OpenCollabDaemon {
       clearTimeout(document.flush);
     }
     document.flush = setTimeout(() => {
+      document.flush = undefined;
+      document.recentHostWrite = {
+        content: text,
+        expiresAt: Date.now() + 5_000
+      };
       void this.workspace.writeFile(protocolPath, this.encoder.encode(text)).catch(error => {
         this.logger.error(`Failed to write synced document ${protocolPath}`, error);
       });
@@ -329,6 +341,12 @@ export class OpenCollabDaemon {
     }
     try {
       const content = this.decoder.decode(await this.workspace.readFile(protocolPath));
+      if (document.recentHostWrite && document.recentHostWrite.expiresAt < Date.now()) {
+        document.recentHostWrite = undefined;
+      }
+      if (document.recentHostWrite?.content === content) {
+        return;
+      }
       this.updateOpenDocument(protocolPath, content);
     } catch (error) {
       this.logger.warn(`Failed to sync changed document ${protocolPath}: ${stringifyError(error)}`);

@@ -52,7 +52,70 @@ describe('OpenCollabDaemon protocol handlers', () => {
     expect(connection.inits[1].target).toBe('guest-2');
     expect(connection.inits[1].data.guests.map(guest => guest.id)).toEqual(['guest-1']);
   });
+
+  it('does not overwrite already populated shared text when opening a document', async () => {
+    const { daemon, workspace } = await makeDaemon();
+    await fs.writeFile(path.join(workspace, 'README.md'), '# stale\n');
+
+    const internals = daemon as unknown as DaemonInternals;
+    const yjsText = internals.ydoc.getText('project/README.md');
+    yjsText.insert(0, '# live edit\n');
+
+    await internals.openTextDocument('project/README.md');
+
+    expect(yjsText.toString()).toBe('# live edit\n');
+  });
+
+  it('ignores watcher syncs for recent daemon persistence writes', async () => {
+    const { daemon, workspace } = await makeDaemon();
+    await fs.writeFile(path.join(workspace, 'README.md'), '# \n');
+
+    const internals = daemon as unknown as DaemonInternals;
+    await internals.openTextDocument('project/README.md');
+    const yjsText = internals.ydoc.getText('project/README.md');
+
+    internals.scheduleWrite('project/README.md', '# This\n');
+    yjsText.delete(0, yjsText.length);
+    yjsText.insert(0, '# This is newer\n');
+
+    await new Promise(resolve => setTimeout(resolve, 150));
+    await expect(fs.readFile(path.join(workspace, 'README.md'), 'utf8')).resolves.toBe('# This\n');
+
+    await internals.syncOpenDocumentFromDisk('project/README.md');
+
+    expect(yjsText.toString()).toBe('# This is newer\n');
+  });
 });
+
+interface DaemonInternals {
+  ydoc: {
+    getText(name: string): {
+      length: number;
+      delete(index: number, length: number): void;
+      insert(index: number, text: string): void;
+      toString(): string;
+    };
+  };
+  openTextDocument(protocolPath: string): Promise<void>;
+  scheduleWrite(protocolPath: string, text: string): void;
+  syncOpenDocumentFromDisk(protocolPath: string): Promise<void>;
+}
+
+async function makeDaemon(): Promise<{ daemon: OpenCollabDaemon; workspace: string }> {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'oct-daemon-'));
+  return {
+    workspace,
+    daemon: new OpenCollabDaemon({
+      workspace,
+      server: DEFAULT_SERVER_URL,
+      authTokenFile: path.join(workspace, '.token'),
+      readonly: false,
+      exclude: DEFAULT_EXCLUDES,
+      name: 'project',
+      detached: false
+    }, logger)
+  };
+}
 
 function peer(id: string, host: boolean): Peer {
   return {
