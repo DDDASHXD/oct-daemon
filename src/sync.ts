@@ -202,6 +202,9 @@ export class OpenCollabSync {
     reconcileDirectory: boolean
   ): Promise<void> {
     const workspace = this.requireWorkspace();
+    if (!workspace.localPathForProtocol(protocolPath)) {
+      return;
+    }
     this.markApplyingRemote(protocolPath);
     await workspace.mkdir(protocolPath);
     const remoteEntries = await connection.fs.readdir(host.id, protocolPath);
@@ -210,6 +213,9 @@ export class OpenCollabSync {
     }
     for (const [name, type] of Object.entries(remoteEntries)) {
       const child = `${protocolPath}/${name}`;
+      if (!workspace.localPathForProtocol(child)) {
+        continue;
+      }
       if (type === FileType.Directory) {
         await this.syncRemoteDirectory(connection, host, child, reconcileDirectory);
       } else if (type === FileType.File) {
