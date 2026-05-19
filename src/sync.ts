@@ -27,6 +27,8 @@ export class OpenCollabSync {
   private connection?: ProtocolBroadcastConnection;
   private watcher?: FSWatcher;
   private host?: Peer;
+  private hostInitReceived = false;
+  private resolveHostInit?: (host: Peer) => void;
   private stopped = false;
   private readonly applyingRemote = new Map<string, NodeJS.Timeout>();
 
@@ -82,8 +84,9 @@ export class OpenCollabSync {
     this.logger.info(`REMOTE_WORKSPACE=${join.workspace.name}`);
     this.logger.info(`LOCAL_WORKSPACE=${this.options.workspace}`);
 
-    await this.downloadRemoteWorkspace(connection, join.host);
-    this.startFileWatcher(connection, join.host);
+    const host = await this.waitForHostInit(connection, join.host);
+    await this.downloadRemoteWorkspace(connection, host);
+    this.startFileWatcher(connection);
     this.logger.info('SYNC_READY=1');
 
     return {
@@ -120,14 +123,19 @@ export class OpenCollabSync {
       void this.stop();
     }));
     this.disposables.push(connection.onReconnect(() => {
-      this.logger.info('Reconnected to OCT server.');
+      this.logger.info('Reconnected to OCT server; resyncing workspace.');
+      const host = this.host;
+      if (host) {
+        void this.downloadRemoteWorkspace(connection, host).catch(error => {
+          this.logger.error('Failed to resync workspace after reconnect', error);
+        });
+      }
     }));
     connection.peer.onInfo((_, peer) => {
       this.logger.info(`SYNC_PEER=${peer.id}`);
     });
     connection.peer.onInit((_, init) => {
-      this.host = init.host;
-      this.logger.info(`INIT_HOST=${init.host.id}`);
+      this.onHostInit(init.host);
     });
     connection.room.onLeave((_, peer) => {
       if (peer.id === this.host?.id) {
@@ -255,9 +263,38 @@ export class OpenCollabSync {
     }
   }
 
-  private startFileWatcher(connection: ProtocolBroadcastConnection, host: Peer): void {
+  private onHostInit(host: Peer): void {
+    this.hostInitReceived = true;
+    this.host = host;
+    this.logger.info(`INIT_HOST=${host.id}`);
+    this.resolveHostInit?.(host);
+  }
+
+  private async waitForHostInit(_connection: ProtocolBroadcastConnection, fallbackHost: Peer): Promise<Peer> {
+    await undefined;
+    if (this.hostInitReceived) {
+      return this.host ?? fallbackHost;
+    }
+    return new Promise<Peer>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.resolveHostInit = undefined;
+        reject(new Error('Timed out waiting for host initialization. Ensure an oct-daemon host is running for this room.'));
+      }, 30_000);
+      this.resolveHostInit = host => {
+        clearTimeout(timeout);
+        this.resolveHostInit = undefined;
+        resolve(host);
+      };
+    });
+  }
+
+  private startFileWatcher(connection: ProtocolBroadcastConnection): void {
     const workspace = this.requireWorkspace();
     const pushLocalFile = async (filePath: string) => {
+      const host = this.host;
+      if (!host) {
+        return;
+      }
       const protocolPath = workspace.protocolPathForFile(filePath);
       if (!protocolPath || this.isApplyingRemote(protocolPath)) {
         return;
@@ -267,6 +304,10 @@ export class OpenCollabSync {
       this.logger.info(`PUSHED_FILE=${protocolPath}`);
     };
     const pushLocalMkdir = async (filePath: string) => {
+      const host = this.host;
+      if (!host) {
+        return;
+      }
       const protocolPath = workspace.protocolPathForFile(filePath);
       if (!protocolPath || this.isApplyingRemote(protocolPath)) {
         return;
@@ -275,6 +316,10 @@ export class OpenCollabSync {
       this.logger.info(`PUSHED_DIR=${protocolPath}`);
     };
     const pushLocalDelete = async (filePath: string) => {
+      const host = this.host;
+      if (!host) {
+        return;
+      }
       const protocolPath = workspace.protocolPathForFile(filePath);
       if (!protocolPath || this.isApplyingRemote(protocolPath)) {
         return;

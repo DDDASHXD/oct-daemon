@@ -14,6 +14,36 @@ const logger: Logger = {
 };
 
 describe('OpenCollabDaemon protocol handlers', () => {
+  it('initializes guests that joined before host peer info arrives', async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'oct-daemon-'));
+    const connection = new FakeConnection();
+    const daemon = new OpenCollabDaemon({
+      command: 'host',
+      workspace,
+      server: DEFAULT_SERVER_URL,
+      authTokenFile: path.join(workspace, '.token'),
+      readonly: false,
+      exclude: DEFAULT_EXCLUDES,
+      name: 'project',
+      detached: false
+    }, logger);
+
+    (daemon as unknown as {
+      registerConnectionHandlers(connection: ProtocolBroadcastConnection): void;
+    }).registerConnectionHandlers(connection as unknown as ProtocolBroadcastConnection);
+
+    const earlyGuest = peer('guest-early', false);
+    await connection.roomJoinHandler('', earlyGuest);
+    expect(connection.inits).toHaveLength(0);
+
+    const host = peer('host', true);
+    connection.peerInfoHandler('', host);
+
+    expect(connection.inits).toHaveLength(1);
+    expect(connection.inits[0].target).toBe('guest-early');
+    expect(connection.inits[0].data.guests).toEqual([]);
+  });
+
   it('auto-accepts joins and initializes new peers with existing guests only', async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'oct-daemon-'));
     const connection = new FakeConnection();

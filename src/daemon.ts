@@ -47,6 +47,7 @@ export class OpenCollabDaemon {
   private yjsProvider?: OpenCollaborationYjsProvider;
   private watcher?: FSWatcher;
   private ownPeer?: Peer;
+  private readonly pendingGuestInits: Peer[] = [];
   private stopped = false;
 
   constructor(
@@ -158,23 +159,21 @@ export class OpenCollabDaemon {
       this.ownPeer = peer;
       this.awareness.setLocalStateField('peer', peer.id);
       this.logger.info(`HOST_PEER=${peer.id}`);
+      void this.flushPendingGuestInits(connection).catch(error => {
+        this.logger.error('Failed to initialize guests that joined before host peer info', error);
+      });
     });
 
     connection.peer.onJoinRequest(async (_, user) => this.acceptJoin(user));
 
     connection.room.onJoin(async (_, peer) => {
-      if (this.ownPeer) {
-        await connection.peer.init(peer.id, {
-          protocol: VERSION,
-          host: this.ownPeer,
-          guests: Array.from(this.peers.values()),
-          capabilities: {},
-          permissions: { readonly: this.options.readonly },
-          workspace: this.workspaceInfo()
-        });
-      }
       this.peers.set(peer.id, peer);
       this.logger.info(`PEER_JOINED=${formatPeer(peer)}`);
+      if (this.ownPeer) {
+        await this.sendPeerInit(connection, peer);
+      } else {
+        this.pendingGuestInits.push(peer);
+      }
     });
 
     connection.room.onLeave((_, peer) => {
@@ -196,6 +195,29 @@ export class OpenCollabDaemon {
     return {
       workspace: this.workspaceInfo()
     };
+  }
+
+  private async flushPendingGuestInits(connection: ProtocolBroadcastConnection): Promise<void> {
+    while (this.pendingGuestInits.length > 0) {
+      const peer = this.pendingGuestInits.shift();
+      if (peer) {
+        await this.sendPeerInit(connection, peer);
+      }
+    }
+  }
+
+  private async sendPeerInit(connection: ProtocolBroadcastConnection, peer: Peer): Promise<void> {
+    if (!this.ownPeer) {
+      return;
+    }
+    await connection.peer.init(peer.id, {
+      protocol: VERSION,
+      host: this.ownPeer,
+      guests: Array.from(this.peers.values()).filter(guest => guest.id !== peer.id),
+      capabilities: {},
+      permissions: { readonly: this.options.readonly },
+      workspace: this.workspaceInfo()
+    });
   }
 
   private workspaceInfo() {
