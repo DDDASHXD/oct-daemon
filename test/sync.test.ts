@@ -15,8 +15,16 @@ const logger: Logger = {
 };
 
 describe('OpenCollabSync', () => {
-  it('registers no-op Yjs sync handlers to keep protocol logs quiet', async () => {
+  it('writes collaborative Yjs document updates to the local mirror', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oct-sync-'));
+    const messages: string[] = [];
+    const loggingLogger: Logger = {
+      info(message) {
+        messages.push(message);
+      },
+      warn() {},
+      error() {}
+    };
     const sync = new OpenCollabSync({
       command: 'sync',
       workspace: root,
@@ -24,13 +32,23 @@ describe('OpenCollabSync', () => {
       room: 'room',
       authTokenFile: path.join(root, '.token'),
       exclude: DEFAULT_EXCLUDES
-    }, logger);
-    const connection = new FakeHandlerConnection();
+    }, loggingLogger);
+    const internals = sync as unknown as SyncInternals;
+    internals.workspace = new SyncWorkspace({
+      root,
+      remoteFolders: ['bachproj'],
+      excludes: DEFAULT_EXCLUDES
+    });
+    internals.setupYjsSync(new FakeHandlerConnection() as unknown as ProtocolBroadcastConnection);
 
-    (sync as unknown as SyncInternals).registerConnectionHandlers(connection as unknown as ProtocolBroadcastConnection);
+    internals.ydoc.transact(() => {
+      internals.ydoc.getText('bachproj/README.md').insert(0, '# Live\n');
+    }, 'peer-1');
 
-    expect(connection.dataUpdateHandlers).toBe(1);
-    expect(connection.awarenessUpdateHandlers).toBe(1);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    await expect(fs.readFile(path.join(root, 'README.md'), 'utf8')).resolves.toBe('# Live\n');
+    expect(messages.some(message => message === 'YJS_WROTE_FILE=bachproj/README.md')).toBe(true);
   });
 
   it('skips excluded remote directories during recursive downloads', async () => {
@@ -64,6 +82,8 @@ describe('OpenCollabSync', () => {
 
 interface SyncInternals {
   workspace: SyncWorkspace;
+  ydoc: import('yjs').Doc;
+  setupYjsSync(connection: ProtocolBroadcastConnection): void;
   registerConnectionHandlers(connection: ProtocolBroadcastConnection): void;
   syncRemotePath(
     connection: ProtocolBroadcastConnection,
@@ -74,9 +94,6 @@ interface SyncInternals {
 }
 
 class FakeHandlerConnection {
-  dataUpdateHandlers = 0;
-  awarenessUpdateHandlers = 0;
-
   onDisconnect() {
     return { dispose() {} };
   }
@@ -102,12 +119,12 @@ class FakeHandlerConnection {
   };
 
   sync = {
-    onDataUpdate: () => {
-      this.dataUpdateHandlers++;
-    },
-    onAwarenessUpdate: () => {
-      this.awarenessUpdateHandlers++;
-    }
+    onDataUpdate: () => {},
+    onAwarenessUpdate: () => {},
+    onAwarenessQuery: () => {},
+    dataUpdate: async () => {},
+    awarenessUpdate: async () => {},
+    awarenessQuery: async () => {}
   };
 }
 

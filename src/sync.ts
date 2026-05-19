@@ -1,3 +1,4 @@
+import { TextEncoder } from 'node:util';
 import fs from 'node:fs/promises';
 import { watch, type FSWatcher } from 'chokidar';
 import {
@@ -10,6 +11,9 @@ import {
   type Peer,
   type ProtocolBroadcastConnection
 } from 'open-collaboration-protocol';
+import { OpenCollaborationYjsProvider } from 'open-collaboration-yjs';
+import * as awarenessProtocol from 'y-protocols/awareness';
+import * as Y from 'yjs';
 import { readAuthToken, writeAuthToken } from './auth-token.js';
 import type { Logger } from './logger.js';
 import type { SyncOptions } from './options.js';
@@ -22,15 +26,20 @@ export interface RunningSync {
 }
 
 export class OpenCollabSync {
+  private readonly encoder = new TextEncoder();
   private readonly disposables = new DisposableCollection();
+  private readonly ydoc = new Y.Doc();
+  private readonly awareness = new awarenessProtocol.Awareness(this.ydoc);
   private workspace?: SyncWorkspace;
   private connection?: ProtocolBroadcastConnection;
   private watcher?: FSWatcher;
+  private yjsProvider?: OpenCollaborationYjsProvider;
   private host?: Peer;
   private hostInitReceived = false;
   private resolveHostInit?: (host: Peer) => void;
   private stopped = false;
   private readonly applyingRemote = new Map<string, NodeJS.Timeout>();
+  private readonly yjsWriteFlushes = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly options: SyncOptions,
@@ -85,6 +94,7 @@ export class OpenCollabSync {
     this.logger.info(`LOCAL_WORKSPACE=${this.options.workspace}`);
 
     const host = await this.waitForHostInit(connection, join.host);
+    this.setupYjsSync(connection);
     await this.downloadRemoteWorkspace(connection, host);
     this.startFileWatcher(connection);
     this.logger.info('SYNC_READY=1');
@@ -105,6 +115,10 @@ export class OpenCollabSync {
       clearTimeout(timer);
     }
     this.applyingRemote.clear();
+    for (const timer of this.yjsWriteFlushes.values()) {
+      clearTimeout(timer);
+    }
+    this.yjsWriteFlushes.clear();
     await this.watcher?.close();
     try {
       await this.connection?.room.leave();
@@ -124,6 +138,7 @@ export class OpenCollabSync {
     }));
     this.disposables.push(connection.onReconnect(() => {
       this.logger.info('Reconnected to OCT server; resyncing workspace.');
+      this.yjsProvider?.connect();
       const host = this.host;
       if (host) {
         void this.downloadRemoteWorkspace(connection, host).catch(error => {
@@ -148,12 +163,73 @@ export class OpenCollabSync {
       void this.stop();
     });
     connection.fs.onChange((_, event) => {
+      if (event.changes.length > 0) {
+        this.logger.info(`REMOTE_FS_CHANGE count=${event.changes.length}`);
+      }
       void this.applyRemoteChanges(connection, event.changes).catch(error => {
         this.logger.error('Failed to apply remote file changes', error);
       });
     });
-    connection.sync.onDataUpdate(() => {});
-    connection.sync.onAwarenessUpdate(() => {});
+  }
+
+  private setupYjsSync(connection: ProtocolBroadcastConnection): void {
+    this.yjsProvider = new OpenCollaborationYjsProvider(connection, this.ydoc, this.awareness, {
+      resyncTimer: 10_000
+    });
+    this.yjsProvider.connect();
+    this.disposables.push(this.yjsProvider);
+    this.disposables.push({
+      dispose: () => {
+        this.ydoc.destroy();
+        this.awareness.destroy();
+      }
+    });
+    this.ydoc.on('afterTransaction', transaction => {
+      this.handleYjsTransaction(transaction);
+    });
+    this.logger.info('YJS_SYNC=1');
+  }
+
+  private handleYjsTransaction(transaction: Y.Transaction): void {
+    for (const [protocolPath, shared] of this.ydoc.share.entries()) {
+      if (shared instanceof Y.Text && this.transactionChangedType(transaction, shared)) {
+        this.scheduleYjsWrite(protocolPath, shared.toString());
+      }
+    }
+  }
+
+  private transactionChangedType(transaction: Y.Transaction, type: Y.Text): boolean {
+    return (transaction.changed as unknown as Map<Y.Text, unknown>).has(type);
+  }
+
+  private scheduleYjsWrite(protocolPath: string, text: string): void {
+    const workspace = this.requireWorkspace();
+    if (!workspace.localPathForProtocol(protocolPath)) {
+      return;
+    }
+    const existing = this.yjsWriteFlushes.get(protocolPath);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      this.yjsWriteFlushes.delete(protocolPath);
+      void this.writeYjsDocument(protocolPath, text);
+    }, 100);
+    this.yjsWriteFlushes.set(protocolPath, timer);
+  }
+
+  private async writeYjsDocument(protocolPath: string, text: string): Promise<void> {
+    const workspace = this.requireWorkspace();
+    if (!workspace.localPathForProtocol(protocolPath)) {
+      return;
+    }
+    this.markApplyingRemote(protocolPath);
+    try {
+      await workspace.writeFile(protocolPath, this.encoder.encode(text));
+      this.logger.info(`YJS_WROTE_FILE=${protocolPath}`);
+    } catch (error) {
+      this.logger.error(`Failed to write Yjs document ${protocolPath}`, error);
+    }
   }
 
   private async downloadRemoteWorkspace(connection: ProtocolBroadcastConnection, host: Peer): Promise<void> {
@@ -178,8 +254,10 @@ export class OpenCollabSync {
       this.markApplyingRemote(change.path);
       if (change.type === FileChangeEventType.Delete) {
         await this.requireWorkspace().delete(change.path);
+        this.logger.info(`PULLED_DELETE=${change.path}`);
       } else {
         await this.syncRemotePath(connection, host, change.path, false);
+        this.logger.info(`PULLED_FILE=${change.path}`);
       }
     }
   }
@@ -296,9 +374,15 @@ export class OpenCollabSync {
         return;
       }
       const protocolPath = workspace.protocolPathForFile(filePath);
-      if (!protocolPath || this.isApplyingRemote(protocolPath)) {
+      if (!protocolPath) {
+        this.logger.info(`LOCAL_CHANGE_SKIPPED path=${filePath}`);
         return;
       }
+      if (this.isApplyingRemote(protocolPath)) {
+        this.logger.info(`LOCAL_CHANGE_SUPPRESSED path=${protocolPath}`);
+        return;
+      }
+      this.logger.info(`LOCAL_CHANGE path=${filePath}`);
       const content = await fs.readFile(filePath);
       await connection.fs.writeFile(host.id, protocolPath, { content });
       this.logger.info(`PUSHED_FILE=${protocolPath}`);
